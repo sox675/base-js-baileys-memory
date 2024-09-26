@@ -39,7 +39,7 @@ const createMessage = async (threadId, body) => {
 }
 
 const additionalInstructions = (user) => {
-  return `It's important you have always present this information ${user}, this way you know the name of the student, the english level, etc`
+  return `It's important you have always present this information ${user}, this way you know the name of the person and additional information`
 }
 
 const assistantAsk = async (from, body, openAiThread) => {
@@ -47,29 +47,27 @@ const assistantAsk = async (from, body, openAiThread) => {
 
   await createMessage(thread.id, body)
 
-  let run = await openai.beta.threads.runs.createAndPoll(
+  let stream = await openai.beta.threads.runs.create(
     thread.id,
     {
       assistant_id: ASSISTANT_ID,
-      // additional_instructions: additionalInstructions(user),
+      stream: true,
+      additional_instructions: additionalInstructions(user),
       truncation_strategy: {
         "type": "last_messages",
         "last_messages": 100
       }
     }
-  );
+  )
 
-  if (run.status === 'completed') {
-    const messages = await openai.beta.threads.messages.list(
-      run.thread_id
-    );
+  for await (const eventData of stream) {
+    const { event, data: { content } } = eventData
 
-    const allMessages = messages.data.reverse()
-    const lastMessage = allMessages.at(-1)
+    if (event === 'thread.message.completed') {
+      console.log(content)
 
-    return lastMessage.content[0].text.value
-  } else {
-    console.log(run.status);
+      return content[0].text.value
+    }
   }
 }
 

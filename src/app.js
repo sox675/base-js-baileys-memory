@@ -6,25 +6,31 @@ import { PORT, MONGO_DB_NAME, MONGO_DB_URI } from '../config/index.js'
 import { typing, recording } from "../services/presence.js";
 import { assistantAsk } from '../services/openAiAssistant.js'
 import { checkMembership } from '../services/checkMembership.js'
+import { createMessageQueue } from '../services/fast-entires.js';
 import dbConnect from '../config/db.js'
+
+const queueConfig = { gapSeconds: 2000 }; // miliseconds
+const enqueueMessage = createMessageQueue(queueConfig);
 
 dbConnect()
 
 const mainflow = addKeyword(EVENTS.WELCOME)
-    .addAction(async (ctx, { flowDynamic, state, provider }) => {
+  .addAction(async (ctx, { flowDynamic, state, provider }) => {
+    enqueueMessage(ctx.body, async (body) => {
       const user = await checkMembership(ctx.from)
       console.log('USER ****', user)
       const { openAiThread } = user
 
       await typing(ctx, provider)
 
-      const message = await assistantAsk(ctx.from, ctx.body, openAiThread)
+      const message = await assistantAsk(ctx.from, body, openAiThread)
       const chunks = message.split(/\n\n+/);
 
       for (const chunk of chunks) {
         await flowDynamic([{ body: chunk.trim() }]);
       }
     })
+  })
 
 const main = async () => {
     const adapterFlow = createFlow([mainflow])
